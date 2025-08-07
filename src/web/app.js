@@ -192,8 +192,8 @@ class ChampionWinnerApp {
         this.showLoading('Generating prediction...');
         
         try {
-            // Call the real backend API
-            const response = await fetch('https://champion-winner-api.onrender.com/api/predict', {
+            // Call the backend API (relative URL for any deployment)
+            const response = await fetch('/api/predict', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -336,7 +336,7 @@ class ChampionWinnerApp {
         this.showLoading('Submitting results...');
         
         try {
-            const response = await fetch('https://champion-winner-api.onrender.com/api/submit-results', {
+            const response = await fetch('/api/submit-results', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -376,7 +376,7 @@ class ChampionWinnerApp {
         this.showLoading('Refreshing data...');
         
         try {
-            const response = await fetch('https://champion-winner-api.onrender.com/api/refresh-data', {
+            const response = await fetch('/api/refresh-data', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

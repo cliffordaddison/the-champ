@@ -20,9 +20,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app
-app = Flask(__name__, 
-            static_folder='web',
-            template_folder='web')
+app = Flask(__name__)
 CORS(app)
 
 # Global variables
@@ -87,6 +85,12 @@ def api_info():
 def serve_static(filename):
     """Serve static files"""
     return send_from_directory('web', filename)
+
+# Add a simple test endpoint
+@app.route('/api/test')
+def test_endpoint():
+    """Simple test endpoint"""
+    return jsonify({"message": "API is working!", "timestamp": datetime.now().isoformat()})
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
