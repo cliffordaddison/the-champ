@@ -45,6 +45,7 @@ class SystemConfig:
     db_path: str = "lottery_data.db"
     max_number: int = 49
     numbers_to_predict: int = 6
+    bonus_ball_range: int = 49  # Add missing attribute
     draw_days: List[str] = field(default_factory=lambda: ["Wednesday", "Saturday"])
     host: str = "localhost"
     port: int = 8000
