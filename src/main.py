@@ -60,11 +60,6 @@ def initialize_trainer():
         else:
             logger.info("No existing models found, will train from scratch")
 
-@app.route('/')
-def index():
-    """Serve the main application page"""
-    return send_from_directory('web', 'index.html')
-
 @app.route('/api')
 def api_info():
     """API information endpoint"""
@@ -82,6 +77,11 @@ def api_info():
         ],
         "timestamp": datetime.now().isoformat()
     })
+
+@app.route('/')
+def index():
+    """Serve the main application page"""
+    return send_from_directory('web', 'index.html')
 
 @app.route('/<path:filename>')
 def serve_static(filename):
