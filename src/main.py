@@ -98,6 +98,19 @@ def test_endpoint():
     """Simple test endpoint"""
     return jsonify({"message": "API is working!", "timestamp": datetime.now().isoformat()})
 
+# Add a debug endpoint
+@app.route('/debug')
+def debug_info():
+    """Debug information endpoint"""
+    return jsonify({
+        "app_name": "Champion Winner",
+        "environment": os.environ.get('FLASK_ENV', 'development'),
+        "debug_mode": os.environ.get('FLASK_DEBUG', 'False'),
+        "port": os.environ.get('PORT', '8000'),
+        "timestamp": datetime.now().isoformat(),
+        "routes": [str(rule) for rule in app.url_map.iter_rules()]
+    })
+
 @app.route('/api/predict', methods=['POST'])
 def predict():
     """Generate prediction for next draw"""
@@ -112,29 +125,69 @@ def predict():
         if trainer and hasattr(trainer, 'models') and trainer.models:
             models_loaded = True
         
-        # For now, return a mock prediction
-        # In production, this would use the actual trained model
-        mock_prediction = {
-            "predicted_numbers": [7, 12, 23, 31, 38, 45],
-            "confidence_scores": {
-                7: 0.85,
-                12: 0.78,
-                23: 0.72,
-                31: 0.68,
-                38: 0.65,
-                45: 0.61
-            },
-            "ensemble_probabilities": [0.02] * 49,  # Mock probabilities
-            "agent_predictions": {
-                "QLearning": [3, 11, 19, 27, 35, 43],
-                "PatternRecognition": [5, 13, 21, 29, 37, 45],
-                "FrequencyAnalysis": [2, 10, 18, 26, 34, 42]
-            },
-            "prediction_timestamp": datetime.now().isoformat(),
-            "model_status": "trained_model" if models_loaded else "mock_prediction"
-        }
-        
-        return jsonify(mock_prediction)
+        # Use real model prediction if available
+        if models_loaded and trainer:
+            try:
+                # Get real prediction from the trained model
+                prediction = trainer.predict_next_draw()
+                
+                # Format the prediction for the API response
+                real_prediction = {
+                    "predicted_numbers": prediction.get('numbers', []),
+                    "confidence_scores": prediction.get('confidence_scores', {}),
+                    "ensemble_probabilities": prediction.get('probabilities', []),
+                    "agent_predictions": prediction.get('agent_predictions', {}),
+                    "prediction_timestamp": datetime.now().isoformat(),
+                    "model_status": "trained_model"
+                }
+                
+                return jsonify(real_prediction)
+                
+            except Exception as e:
+                logger.error(f"Error getting real prediction: {e}")
+                # Fall back to mock prediction if real prediction fails
+                mock_prediction = {
+                    "predicted_numbers": [7, 12, 23, 31, 38, 45],
+                    "confidence_scores": {
+                        7: 0.85,
+                        12: 0.78,
+                        23: 0.72,
+                        31: 0.68,
+                        38: 0.65,
+                        45: 0.61
+                    },
+                    "ensemble_probabilities": [0.02] * 49,
+                    "agent_predictions": {
+                        "QLearning": [3, 11, 19, 27, 35, 43],
+                        "PatternRecognition": [5, 13, 21, 29, 37, 45],
+                        "FrequencyAnalysis": [2, 10, 18, 26, 34, 42]
+                    },
+                    "prediction_timestamp": datetime.now().isoformat(),
+                    "model_status": "mock_prediction"
+                }
+                return jsonify(mock_prediction)
+        else:
+            # Return mock prediction when models are not available
+            mock_prediction = {
+                "predicted_numbers": [7, 12, 23, 31, 38, 45],
+                "confidence_scores": {
+                    7: 0.85,
+                    12: 0.78,
+                    23: 0.72,
+                    31: 0.68,
+                    38: 0.65,
+                    45: 0.61
+                },
+                "ensemble_probabilities": [0.02] * 49,
+                "agent_predictions": {
+                    "QLearning": [3, 11, 19, 27, 35, 43],
+                    "PatternRecognition": [5, 13, 21, 29, 37, 45],
+                    "FrequencyAnalysis": [2, 10, 18, 26, 34, 42]
+                },
+                "prediction_timestamp": datetime.now().isoformat(),
+                "model_status": "mock_prediction"
+            }
+            return jsonify(mock_prediction)
         
     except Exception as e:
         logger.error(f"Error generating prediction: {e}")
@@ -196,9 +249,31 @@ def refresh_data():
         scraper.cleanup()
         
         if results:
-            # In production, this would save to database
-            logger.info(f"Refreshed {len(results)} results from websites")
-            return jsonify({"message": f"Refreshed {len(results)} results"})
+            # Save real data to CSV files
+            import pandas as pd
+            from datetime import datetime
+            
+            # Convert results to DataFrame
+            df = pd.DataFrame(results)
+            
+            # Save to multiple files for redundancy
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Save to main data file
+            main_file = f"data/ont49_data_{timestamp}.csv"
+            os.makedirs('data', exist_ok=True)
+            df.to_csv(main_file, index=False)
+            
+            # Also save to the standard filename
+            standard_file = "data/cleaned_ont49.csv"
+            df.to_csv(standard_file, index=False)
+            
+            logger.info(f"Refreshed {len(results)} results and saved to {main_file} and {standard_file}")
+            return jsonify({
+                "message": f"Refreshed {len(results)} results",
+                "files_saved": [main_file, standard_file],
+                "timestamp": timestamp
+            })
         else:
             return jsonify({"error": "No data retrieved from websites"}), 500
             
@@ -256,18 +331,60 @@ def run_training(auto_scrape, continuous_training):
     global trainer, training_status
     
     try:
-        # Mock training process
-        for i in range(101):
-            training_status['progress'] = i
-            training_status['status'] = f'Training step {i}/100'
-            time.sleep(0.1)  # Simulate training time
+        training_status['status'] = 'Loading data...'
+        training_status['progress'] = 10
         
-        training_status['status'] = 'Training completed'
+        # Load real training data
+        data_files = ['data/cleaned_ont49.csv', 'data/fixed_ont49_new.csv', 'data/fixed_ont49.csv', 'data/Ont49.csv']
+        training_data = None
+        
+        for file_path in data_files:
+            if os.path.exists(file_path):
+                try:
+                    import pandas as pd
+                    training_data = pd.read_csv(file_path)
+                    logger.info(f"Loaded training data from {file_path}")
+                    break
+                except Exception as e:
+                    logger.error(f"Error loading {file_path}: {e}")
+                    continue
+        
+        if training_data is None:
+            raise Exception("No training data found")
+        
+        training_status['status'] = 'Preprocessing data...'
+        training_status['progress'] = 20
+        
+        # Preprocess the data
+        trainer.preprocess_data(training_data)
+        
+        training_status['status'] = 'Training Q-Learning agent...'
+        training_status['progress'] = 40
+        
+        # Train Q-Learning agent
+        trainer.train_ql_agent(training_data)
+        
+        training_status['status'] = 'Training Pattern Recognition agent...'
+        training_status['progress'] = 60
+        
+        # Train Pattern Recognition agent
+        trainer.train_pattern_agent(training_data)
+        
+        training_status['status'] = 'Training Frequency Analysis agent...'
+        training_status['progress'] = 80
+        
+        # Train Frequency Analysis agent
+        trainer.train_frequency_agent(training_data)
+        
+        training_status['status'] = 'Saving models...'
+        training_status['progress'] = 90
+        
+        # Save all trained models
+        trainer.save_models('models')
+        
+        training_status['status'] = 'Training completed successfully!'
+        training_status['progress'] = 100
         training_status['completed'] = True
-        
-        # Save models
-        if trainer:
-            trainer.save_models('models')
         
         logger.info("Training completed successfully")
         
@@ -339,27 +456,63 @@ def performance_metrics():
 def recent_results():
     """Get recent results"""
     try:
-        # In production, this would load from database
-        # For now, return mock data
-        mock_results = [
-            {
-                'date': '2024-01-15',
-                'numbers': [3, 12, 25, 31, 38, 45],
-                'status': 'partial'
-            },
-            {
-                'date': '2024-01-12',
-                'numbers': [7, 15, 22, 29, 36, 44],
-                'status': 'miss'
-            },
-            {
-                'date': '2024-01-10',
-                'numbers': [2, 11, 19, 27, 35, 43],
-                'status': 'match'
-            }
-        ]
+        # Load real data from CSV files
+        data_files = ['data/cleaned_ont49.csv', 'data/fixed_ont49_new.csv', 'data/fixed_ont49.csv', 'data/Ont49.csv']
+        all_results = []
         
-        return jsonify(mock_results)
+        for file_path in data_files:
+            if os.path.exists(file_path):
+                try:
+                    import pandas as pd
+                    df = pd.read_csv(file_path)
+                    
+                    # Get the most recent results (assuming the data has date and number columns)
+                    if not df.empty:
+                        # Extract the last few rows as recent results
+                        recent_data = df.tail(5)  # Get last 5 results
+                        
+                        for _, row in recent_data.iterrows():
+                            # Extract numbers from the row (adjust column names as needed)
+                            numbers = []
+                            for col in df.columns:
+                                if 'number' in col.lower() or 'ball' in col.lower():
+                                    if pd.notna(row[col]) and row[col] > 0:
+                                        numbers.append(int(row[col]))
+                            
+                            if len(numbers) >= 6:
+                                result = {
+                                    'date': str(row.get('date', 'Unknown')),
+                                    'numbers': numbers[:6],  # Take first 6 numbers
+                                    'status': 'unknown'  # Will be calculated when compared to predictions
+                                }
+                                all_results.append(result)
+                except Exception as e:
+                    logger.error(f"Error reading {file_path}: {e}")
+                    continue
+        
+        # If no real data found, return mock data
+        if not all_results:
+            mock_results = [
+                {
+                    'date': '2024-01-15',
+                    'numbers': [3, 12, 25, 31, 38, 45],
+                    'status': 'partial'
+                },
+                {
+                    'date': '2024-01-12',
+                    'numbers': [7, 15, 22, 29, 36, 44],
+                    'status': 'miss'
+                },
+                {
+                    'date': '2024-01-10',
+                    'numbers': [2, 11, 19, 27, 35, 43],
+                    'status': 'match'
+                }
+            ]
+            return jsonify(mock_results)
+        
+        # Return real results (limit to 10 most recent)
+        return jsonify(all_results[-10:])
         
     except Exception as e:
         logger.error(f"Error loading recent results: {e}")
@@ -452,6 +605,11 @@ if __name__ == '__main__':
     
     # Get port from environment variable for deployment
     port = int(os.environ.get('PORT', system_config.port))
+    
+    # Add debug logging
+    print(f"Starting Flask app on port {port}")
+    print(f"Environment: {os.environ.get('FLASK_ENV', 'development')}")
+    print(f"Debug mode: {os.environ.get('FLASK_DEBUG', 'False')}")
     
     # Run the application
     app.run(
