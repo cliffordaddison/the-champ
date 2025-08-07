@@ -346,57 +346,84 @@ class ChampionWinnerTrainer:
         """Save all trained models"""
         os.makedirs(base_path, exist_ok=True)
         
-        # Save individual agents
-        for name, agent in self.agents.items():
-            model_path = os.path.join(base_path, f"{name}_model.pkl")
-            agent.save_model(model_path)
+        # Save individual agents with correct file names
+        agent_files = {
+            'q_learning': 'q_learning_model.pkl',
+            'pattern_recognition': 'pattern_recognition_model.pkl',
+            'frequency_analysis': 'frequency_analysis_model.pkl'
+        }
+        
+        for name, filename in agent_files.items():
+            model_path = os.path.join(base_path, filename)
+            self.agents[name].save_model(model_path)
+            logger.info(f"Saved {name} model to {model_path}")
         
         # Save ensemble
         ensemble_path = os.path.join(base_path, "ensemble_model.pkl")
         self.agents['ensemble'].save_model(ensemble_path)
+        logger.info(f"Saved ensemble model to {ensemble_path}")
         
         # Save feature engineer
         scaler_path = os.path.join(base_path, "feature_scaler.pkl")
         self.feature_engineer.save_scaler(scaler_path)
+        logger.info(f"Saved feature scaler to {scaler_path}")
         
         # Save performance metrics
         metrics_path = os.path.join(base_path, "performance_metrics.json")
         with open(metrics_path, 'w') as f:
             json.dump(self.performance_metrics, f, indent=2)
+        logger.info(f"Saved performance metrics to {metrics_path}")
         
         logger.info(f"All models saved to {base_path}")
     
     def load_models(self, base_path: str = "models"):
         """Load all trained models"""
         try:
-            # Load individual agents
-            for name, agent in self.agents.items():
-                model_path = os.path.join(base_path, f"{name}_model.pkl")
+            # Load individual agents with correct file names
+            agent_files = {
+                'q_learning': 'q_learning_model.pkl',
+                'pattern_recognition': 'pattern_recognition_model.pkl',
+                'frequency_analysis': 'frequency_analysis_model.pkl'
+            }
+            
+            for name, filename in agent_files.items():
+                model_path = os.path.join(base_path, filename)
                 if os.path.exists(model_path):
-                    agent.load_model(model_path)
+                    self.agents[name].load_model(model_path)
+                    logger.info(f"Loaded {name} model from {model_path}")
+                else:
+                    logger.warning(f"Model file not found: {model_path}")
             
             # Load ensemble
             ensemble_path = os.path.join(base_path, "ensemble_model.pkl")
             if os.path.exists(ensemble_path):
                 self.agents['ensemble'].load_model(ensemble_path)
+                logger.info(f"Loaded ensemble model from {ensemble_path}")
+            else:
+                logger.warning(f"Ensemble model file not found: {ensemble_path}")
             
             # Load feature engineer
             scaler_path = os.path.join(base_path, "feature_scaler.pkl")
             if os.path.exists(scaler_path):
                 self.feature_engineer.load_scaler(scaler_path)
+                logger.info(f"Loaded feature scaler from {scaler_path}")
+            else:
+                logger.warning(f"Feature scaler file not found: {scaler_path}")
             
             # Load performance metrics
             metrics_path = os.path.join(base_path, "performance_metrics.json")
             if os.path.exists(metrics_path):
                 with open(metrics_path, 'r') as f:
                     self.performance_metrics = json.load(f)
+                logger.info(f"Loaded performance metrics from {metrics_path}")
+            else:
+                logger.warning(f"Performance metrics file not found: {metrics_path}")
             
-            logger.info(f"All models loaded from {base_path}")
-            return True
+            logger.info("All available models loaded successfully")
             
         except Exception as e:
             logger.error(f"Error loading models: {e}")
-            return False
+            raise
     
     def get_training_summary(self) -> Dict:
         """Get training summary and performance metrics"""

@@ -34,6 +34,7 @@ training_status = {
     'status': 'Ready',
     'completed': False
 }
+models_loaded = False
 
 # Add error handlers
 @app.errorhandler(404)
@@ -50,15 +51,35 @@ def handle_exception(e):
 
 def initialize_trainer():
     """Initialize the ML trainer"""
-    global trainer
+    global trainer, models_loaded
     if trainer is None:
         trainer = ChampionWinnerTrainer()
-        # Try to load existing models
-        if os.path.exists('models'):
-            trainer.load_models('models')
-            logger.info("Loaded existing models")
+        models_loaded = False
+        
+        # Check if model files exist (using actual file names)
+        model_files = [
+            'models/q_learning_model.pkl',
+            'models/pattern_recognition_model.pkl', 
+            'models/frequency_analysis_model.pkl',
+            'models/ensemble_model.pkl',
+            'models/feature_scaler.pkl'
+        ]
+        
+        # Check if all required model files exist
+        all_models_exist = all(os.path.exists(f) for f in model_files)
+        
+        if all_models_exist:
+            try:
+                trainer.load_models('models')
+                models_loaded = True
+                logger.info("Successfully loaded all existing models")
+            except Exception as e:
+                logger.error(f"Error loading models: {e}")
+                models_loaded = False
         else:
-            logger.info("No existing models found, will train from scratch")
+            missing_models = [f for f in model_files if not os.path.exists(f)]
+            logger.info(f"Missing model files: {missing_models}")
+            models_loaded = False
 
 @app.route('/api')
 def api_info():
@@ -115,15 +136,10 @@ def debug_info():
 def predict():
     """Generate prediction for next draw"""
     try:
-        global trainer
-        models_loaded = False
+        global trainer, models_loaded
         
         if trainer is None:
             initialize_trainer()
-        
-        # Check if models are available
-        if trainer and hasattr(trainer, 'models') and trainer.models:
-            models_loaded = True
         
         # Use real model prediction if available
         if models_loaded and trainer:
@@ -328,7 +344,7 @@ def start_training():
 
 def run_training(auto_scrape, continuous_training):
     """Run training in background thread"""
-    global trainer, training_status
+    global trainer, training_status, models_loaded
     
     try:
         training_status['status'] = 'Loading data...'
@@ -381,6 +397,9 @@ def run_training(auto_scrape, continuous_training):
         
         # Save all trained models
         trainer.save_models('models')
+        
+        # Set models as loaded after successful training
+        models_loaded = True
         
         training_status['status'] = 'Training completed successfully!'
         training_status['progress'] = 100
@@ -580,11 +599,7 @@ def test_scraping():
 @app.route('/api/health')
 def health_check():
     """Health check endpoint"""
-    global trainer
-    models_loaded = False
-    
-    if trainer and hasattr(trainer, 'models') and trainer.models:
-        models_loaded = True
+    global trainer, models_loaded
     
     return jsonify({
         "status": "healthy",
