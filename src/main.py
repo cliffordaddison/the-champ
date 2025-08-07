@@ -1,0 +1,402 @@
+"""
+Champion Winner - Main Flask Application
+"""
+
+import os
+import json
+import logging
+from datetime import datetime
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask_cors import CORS
+import threading
+import time
+
+from src.ml.train import ChampionWinnerTrainer
+from src.utils.scraper import LotteryScraper
+from src.ml.config import system_config
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize Flask app
+app = Flask(__name__, 
+            static_folder='web',
+            template_folder='web')
+CORS(app)
+
+# Global variables
+trainer = None
+training_thread = None
+training_status = {
+    'is_training': False,
+    'progress': 0,
+    'status': 'Ready',
+    'completed': False
+}
+
+def initialize_trainer():
+    """Initialize the ML trainer"""
+    global trainer
+    if trainer is None:
+        trainer = ChampionWinnerTrainer()
+        # Try to load existing models
+        if os.path.exists('models'):
+            trainer.load_models('models')
+            logger.info("Loaded existing models")
+        else:
+            logger.info("No existing models found, will train from scratch")
+
+@app.route('/')
+def index():
+    """Serve the main application page"""
+    return send_from_directory('web', 'index.html')
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    """Serve static files"""
+    return send_from_directory('web', filename)
+
+@app.route('/api/predict', methods=['POST'])
+def predict():
+    """Generate prediction for next draw"""
+    try:
+        global trainer
+        if trainer is None:
+            initialize_trainer()
+        
+        # For now, return a mock prediction
+        # In production, this would use the actual trained model
+        mock_prediction = {
+            "predicted_numbers": [7, 12, 23, 31, 38, 45],
+            "confidence_scores": {
+                7: 0.85,
+                12: 0.78,
+                23: 0.72,
+                31: 0.68,
+                38: 0.65,
+                45: 0.61
+            },
+            "ensemble_probabilities": [0.02] * 49,  # Mock probabilities
+            "agent_predictions": {
+                "QLearning": [3, 11, 19, 27, 35, 43],
+                "PatternRecognition": [5, 13, 21, 29, 37, 45],
+                "FrequencyAnalysis": [2, 10, 18, 26, 34, 42]
+            },
+            "prediction_timestamp": datetime.now().isoformat()
+        }
+        
+        return jsonify(mock_prediction)
+        
+    except Exception as e:
+        logger.error(f"Error generating prediction: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/submit-results', methods=['POST'])
+def submit_results():
+    """Submit actual results and evaluate prediction"""
+    try:
+        data = request.get_json()
+        numbers = data.get('numbers', [])
+        bonus_ball = data.get('bonus_ball')
+        prediction = data.get('prediction', {})
+        
+        if not numbers or len(numbers) != 6:
+            return jsonify({"error": "Invalid numbers provided"}), 400
+        
+        # Calculate matches
+        predicted_numbers = prediction.get('predicted_numbers', [])
+        matches = len(set(numbers) & set(predicted_numbers))
+        
+        # Determine result status
+        if matches == 6:
+            status = 'match'
+        elif matches > 0:
+            status = 'partial'
+        else:
+            status = 'miss'
+        
+        # Store result (in production, this would go to a database)
+        result = {
+            'date': datetime.now().isoformat(),
+            'numbers': numbers,
+            'bonus_ball': bonus_ball,
+            'predicted_numbers': predicted_numbers,
+            'matches': matches,
+            'status': status
+        }
+        
+        # Update performance metrics
+        update_performance_metrics(result)
+        
+        return jsonify({
+            "matches": matches,
+            "status": status,
+            "message": f"Results submitted successfully. {matches} matches found."
+        })
+        
+    except Exception as e:
+        logger.error(f"Error submitting results: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/refresh-data', methods=['POST'])
+def refresh_data():
+    """Refresh data from lottery websites"""
+    try:
+        scraper = LotteryScraper()
+        results = scraper.scrape_all_sites()
+        scraper.cleanup()
+        
+        if results:
+            # In production, this would save to database
+            logger.info(f"Refreshed {len(results)} results from websites")
+            return jsonify({"message": f"Refreshed {len(results)} results"})
+        else:
+            return jsonify({"error": "No data retrieved from websites"}), 500
+            
+    except Exception as e:
+        logger.error(f"Error refreshing data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/start-training', methods=['POST'])
+def start_training():
+    """Start model training"""
+    try:
+        global trainer, training_thread, training_status
+        
+        if training_status['is_training']:
+            return jsonify({"error": "Training already in progress"}), 400
+        
+        # Initialize trainer if needed
+        if trainer is None:
+            initialize_trainer()
+        
+        # Get training parameters
+        auto_scrape = request.form.get('auto_scrape', 'false').lower() == 'true'
+        continuous_training = request.form.get('continuous_training', 'false').lower() == 'true'
+        
+        # Handle file upload
+        file = request.files.get('file')
+        if file:
+            # Save uploaded file
+            filename = f"data/uploaded_{int(time.time())}.csv"
+            os.makedirs('data', exist_ok=True)
+            file.save(filename)
+            logger.info(f"Saved uploaded file: {filename}")
+        
+        # Start training in background thread
+        training_status['is_training'] = True
+        training_status['progress'] = 0
+        training_status['status'] = 'Initializing...'
+        training_status['completed'] = False
+        
+        training_thread = threading.Thread(
+            target=run_training,
+            args=(auto_scrape, continuous_training)
+        )
+        training_thread.daemon = True
+        training_thread.start()
+        
+        return jsonify({"message": "Training started successfully"})
+        
+    except Exception as e:
+        logger.error(f"Error starting training: {e}")
+        return jsonify({"error": str(e)}), 500
+
+def run_training(auto_scrape, continuous_training):
+    """Run training in background thread"""
+    global trainer, training_status
+    
+    try:
+        # Mock training process
+        for i in range(101):
+            training_status['progress'] = i
+            training_status['status'] = f'Training step {i}/100'
+            time.sleep(0.1)  # Simulate training time
+        
+        training_status['status'] = 'Training completed'
+        training_status['completed'] = True
+        
+        # Save models
+        if trainer:
+            trainer.save_models('models')
+        
+        logger.info("Training completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Error during training: {e}")
+        training_status['status'] = f'Training failed: {str(e)}'
+    finally:
+        training_status['is_training'] = False
+
+@app.route('/api/stop-training', methods=['POST'])
+def stop_training():
+    """Stop model training"""
+    global training_status
+    
+    training_status['is_training'] = False
+    training_status['status'] = 'Training stopped'
+    
+    return jsonify({"message": "Training stopped"})
+
+@app.route('/api/training-progress')
+def training_progress():
+    """Get training progress"""
+    global training_status
+    
+    return jsonify(training_status)
+
+@app.route('/api/save-model', methods=['POST'])
+def save_model():
+    """Save current model"""
+    try:
+        global trainer
+        if trainer:
+            trainer.save_models('models')
+            return jsonify({"message": "Model saved successfully"})
+        else:
+            return jsonify({"error": "No model to save"}), 400
+    except Exception as e:
+        logger.error(f"Error saving model: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/performance-metrics')
+def performance_metrics():
+    """Get performance metrics"""
+    try:
+        # Load metrics from file
+        metrics_file = 'models/performance_metrics.json'
+        if os.path.exists(metrics_file):
+            with open(metrics_file, 'r') as f:
+                metrics = json.load(f)
+        else:
+            # Return default metrics
+            metrics = {
+                'total_predictions': 0,
+                'exact_matches': 0,
+                'partial_matches': 0,
+                'total_matches': 0,
+                'win_rate': 0.0,
+                'exact_match_rate': 0.0,
+                'average_matches': 0.0
+            }
+        
+        return jsonify(metrics)
+        
+    except Exception as e:
+        logger.error(f"Error loading performance metrics: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/recent-results')
+def recent_results():
+    """Get recent results"""
+    try:
+        # In production, this would load from database
+        # For now, return mock data
+        mock_results = [
+            {
+                'date': '2024-01-15',
+                'numbers': [3, 12, 25, 31, 38, 45],
+                'status': 'partial'
+            },
+            {
+                'date': '2024-01-12',
+                'numbers': [7, 15, 22, 29, 36, 44],
+                'status': 'miss'
+            },
+            {
+                'date': '2024-01-10',
+                'numbers': [2, 11, 19, 27, 35, 43],
+                'status': 'match'
+            }
+        ]
+        
+        return jsonify(mock_results)
+        
+    except Exception as e:
+        logger.error(f"Error loading recent results: {e}")
+        return jsonify({"error": str(e)}), 500
+
+def update_performance_metrics(result):
+    """Update performance metrics with new result"""
+    try:
+        metrics_file = 'models/performance_metrics.json'
+        
+        # Load existing metrics
+        if os.path.exists(metrics_file):
+            with open(metrics_file, 'r') as f:
+                metrics = json.load(f)
+        else:
+            metrics = {
+                'total_predictions': 0,
+                'exact_matches': 0,
+                'partial_matches': 0,
+                'total_matches': 0,
+                'win_rate': 0.0,
+                'exact_match_rate': 0.0,
+                'average_matches': 0.0
+            }
+        
+        # Update metrics
+        metrics['total_predictions'] += 1
+        metrics['total_matches'] += result['matches']
+        
+        if result['status'] == 'match':
+            metrics['exact_matches'] += 1
+        elif result['status'] == 'partial':
+            metrics['partial_matches'] += 1
+        
+        # Calculate rates
+        total = metrics['total_predictions']
+        metrics['win_rate'] = metrics['partial_matches'] / total if total > 0 else 0
+        metrics['exact_match_rate'] = metrics['exact_matches'] / total if total > 0 else 0
+        metrics['average_matches'] = metrics['total_matches'] / total if total > 0 else 0
+        
+        # Save updated metrics
+        os.makedirs('models', exist_ok=True)
+        with open(metrics_file, 'w') as f:
+            json.dump(metrics, f, indent=2)
+            
+    except Exception as e:
+        logger.error(f"Error updating performance metrics: {e}")
+
+@app.route('/api/test-scraping')
+def test_scraping():
+    """Test web scraping functionality"""
+    try:
+        scraper = LotteryScraper()
+        scraper.test_scraping()
+        scraper.cleanup()
+        
+        return jsonify({
+            "message": "Scraping test completed. Check test_primary_site.html and test_backup_site.html for results."
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing scraping: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0"
+    })
+
+if __name__ == '__main__':
+    # Initialize trainer
+    initialize_trainer()
+    
+    # Create necessary directories
+    os.makedirs('data', exist_ok=True)
+    os.makedirs('models', exist_ok=True)
+    os.makedirs('logs', exist_ok=True)
+    
+    # Run the application
+    app.run(
+        host=system_config.host,
+        port=system_config.port,
+        debug=system_config.debug
+    ) 
