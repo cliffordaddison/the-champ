@@ -145,7 +145,7 @@ def predict():
         if models_loaded and trainer:
             try:
                 # Load historical data for prediction
-                data_files = ['data/cleaned_ont49.csv', 'data/fixed_ont49_new.csv', 'data/fixed_ont49.csv', 'data/Ont49.csv']
+                data_files = ['data/fixed_ont49.csv', 'data/fixed_ont49_new.csv', 'data/cleaned_ont49.csv', 'data/Ont49.csv']
                 history = []
                 dates = []
                 
@@ -171,15 +171,26 @@ def predict():
                                             logger.warning(f"Could not parse numbers: {numbers_str}")
                                             continue
                                     else:
-                                        # Try to find individual number columns
+                                        # Try to find individual number columns (like 1,2,3,4,5,6)
                                         for col in df.columns:
-                                            if 'number' in col.lower() or 'ball' in col.lower():
+                                            if col.isdigit() or (col.startswith('Unnamed:') and col.replace('Unnamed:', '').isdigit()):
                                                 try:
                                                     value = row[col]
                                                     if pd.notna(value) and str(value).isdigit():
                                                         numbers.append(int(value))
                                                 except:
                                                     continue
+                                        
+                                        # If we didn't find individual columns, try the old method
+                                        if not numbers:
+                                            for col in df.columns:
+                                                if 'number' in col.lower() or 'ball' in col.lower():
+                                                    try:
+                                                        value = row[col]
+                                                        if pd.notna(value) and str(value).isdigit():
+                                                            numbers.append(int(value))
+                                                    except:
+                                                        continue
                                     
                                     if len(numbers) >= 6:
                                         history.append(numbers[:6])
