@@ -5,7 +5,7 @@ Champion Winner - Main Flask Application
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
 import threading
@@ -153,11 +153,18 @@ def predict():
                     if os.path.exists(file_path):
                         try:
                             import pandas as pd
-                            df = pd.read_csv(file_path)
+                            # Only read the last 100 rows for prediction (most recent data)
+                            df = pd.read_csv(file_path, nrows=100)
                             
                             if not df.empty:
-                                # Extract numbers and dates from the data
-                                for _, row in df.iterrows():
+                                # Create sequential dates starting from 01/10/97
+                                start_date = datetime(1997, 1, 10)  # Friday, but we'll start with Wednesday
+                                # Adjust to first Wednesday
+                                while start_date.weekday() != 2:  # 2 = Wednesday
+                                    start_date += timedelta(days=1)
+                                
+                                # Process rows in reverse order (most recent first)
+                                for idx, row in df.iloc[::-1].iterrows():
                                     numbers = []
                                     
                                     # Check if we have a 'numbers' column with comma-separated values
@@ -168,7 +175,6 @@ def predict():
                                         try:
                                             numbers = [int(x.strip()) for x in numbers_str.split(',')]
                                         except:
-                                            logger.warning(f"Could not parse numbers: {numbers_str}")
                                             continue
                                     else:
                                         # Try to find individual number columns (like 1,2,3,4,5,6)
@@ -195,18 +201,21 @@ def predict():
                                     if len(numbers) >= 6:
                                         history.append(numbers[:6])
                                         
-                                        # Try to get date
-                                        if 'date' in df.columns:
-                                            try:
-                                                date = pd.to_datetime(row['date'])
-                                                dates.append(date)
-                                            except:
-                                                dates.append(datetime.now())
+                                        # Calculate date based on index (alternating Wednesday/Saturday)
+                                        draw_index = len(df) - 1 - idx  # Reverse the index
+                                        if draw_index % 2 == 0:
+                                            # Wednesday
+                                            draw_date = start_date + timedelta(days=draw_index * 3)
                                         else:
-                                            dates.append(datetime.now())
+                                            # Saturday (3 days after Wednesday)
+                                            draw_date = start_date + timedelta(days=(draw_index * 3) + 3)
+                                        
+                                        dates.append(draw_date)
                                 
                                 logger.info(f"Loaded {len(history)} historical draws from {file_path}")
-                                break  # Use first available file
+                                # If we got enough data, stop processing
+                                if len(history) >= 50:
+                                    break
                         except Exception as e:
                             logger.error(f"Error reading {file_path}: {e}")
                             continue
@@ -533,14 +542,21 @@ def recent_results():
             if os.path.exists(file_path):
                 try:
                     import pandas as pd
-                    df = pd.read_csv(file_path)
+                    # Only read the last 20 rows for recent results
+                    df = pd.read_csv(file_path, nrows=20)
                     
                     # Get the most recent results (assuming the data has date and number columns)
                     if not df.empty:
-                        # Extract the last few rows as recent results
-                        recent_data = df.tail(5)  # Get last 5 results
+                        # Create sequential dates starting from 01/10/97
+                        start_date = datetime(1997, 1, 10)  # Friday, but we'll start with Wednesday
+                        # Adjust to first Wednesday
+                        while start_date.weekday() != 2:  # 2 = Wednesday
+                            start_date += timedelta(days=1)
                         
-                        for _, row in recent_data.iterrows():
+                        # Process rows in reverse order (most recent first)
+                        recent_data = df.iloc[::-1]  # Get last 20 results
+                        
+                        for idx, row in recent_data.iterrows():
                             # Extract numbers from the row (adjust column names as needed)
                             numbers = []
                             
@@ -552,26 +568,49 @@ def recent_results():
                                 try:
                                     numbers = [int(x.strip()) for x in numbers_str.split(',')]
                                 except:
-                                    logger.warning(f"Could not parse numbers: {numbers_str}")
                                     continue
                             else:
-                                # Try to find individual number columns
+                                # Try to find individual number columns (like 1,2,3,4,5,6)
                                 for col in df.columns:
-                                    if 'number' in col.lower() or 'ball' in col.lower():
+                                    if col.isdigit() or (col.startswith('Unnamed:') and col.replace('Unnamed:', '').isdigit()):
                                         try:
                                             value = row[col]
                                             if pd.notna(value) and str(value).isdigit():
                                                 numbers.append(int(value))
                                         except:
                                             continue
-                            
-                            if len(numbers) >= 6:
-                                result = {
-                                    'date': str(row.get('date', 'Unknown')),
-                                    'numbers': numbers[:6],  # Take first 6 numbers
-                                    'status': 'unknown'  # Will be calculated when compared to predictions
-                                }
-                                all_results.append(result)
+                                        
+                                        # If we didn't find individual columns, try the old method
+                                        if not numbers:
+                                            for col in df.columns:
+                                                if 'number' in col.lower() or 'ball' in col.lower():
+                                                    try:
+                                                        value = row[col]
+                                                        if pd.notna(value) and str(value).isdigit():
+                                                            numbers.append(int(value))
+                                                    except:
+                                                        continue
+                                    
+                                    if len(numbers) >= 6:
+                                        # Calculate date based on index (alternating Wednesday/Saturday)
+                                        draw_index = len(df) - 1 - idx  # Reverse the index
+                                        if draw_index % 2 == 0:
+                                            # Wednesday
+                                            draw_date = start_date + timedelta(days=draw_index * 3)
+                                        else:
+                                            # Saturday (3 days after Wednesday)
+                                            draw_date = start_date + timedelta(days=(draw_index * 3) + 3)
+                                        
+                                        result = {
+                                            'date': draw_date.strftime('%Y-%m-%d'),
+                                            'numbers': numbers[:6],  # Take first 6 numbers
+                                            'status': 'unknown'  # Will be calculated when compared to predictions
+                                        }
+                                        all_results.append(result)
+                                
+                                # If we got enough data, stop processing
+                                if len(all_results) >= 10:
+                                    break
                 except Exception as e:
                     logger.error(f"Error reading {file_path}: {e}")
                     continue
