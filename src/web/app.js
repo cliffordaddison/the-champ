@@ -208,9 +208,18 @@ class ChampionWinnerApp {
                 this.updateConfidenceBars(prediction.confidence_scores);
                 this.updateAgentPredictions(prediction.agent_predictions);
                 
-                this.showNotification('Prediction generated successfully!', 'success');
+                // Show model status
+                const modelStatus = prediction.model_status || 'unknown';
+                if (modelStatus === 'mock_prediction') {
+                    this.showNotification('Using mock prediction (models not available)', 'warning');
+                } else if (modelStatus === 'trained_model') {
+                    this.showNotification('Prediction generated successfully!', 'success');
+                } else {
+                    this.showNotification('Prediction generated with unknown model status', 'info');
+                }
             } else {
-                throw new Error(`API responded with status: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`API responded with status: ${response.status} - ${errorData.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Error generating prediction:', error);
@@ -352,11 +361,12 @@ class ChampionWinnerApp {
                 this.loadRecentResults();
                 
             } else {
-                throw new Error('Failed to submit results');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`Failed to submit results: ${errorData.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Error submitting results:', error);
-            this.showNotification('Failed to submit results', 'error');
+            this.showNotification(`Failed to submit results: ${error.message}`, 'error');
         } finally {
             this.hideLoading();
         }
@@ -366,7 +376,7 @@ class ChampionWinnerApp {
         this.showLoading('Refreshing data...');
         
         try {
-            const response = await fetch('https://champion-winner-api.onrender.com/api/refresh', {
+            const response = await fetch('https://champion-winner-api.onrender.com/api/refresh-data', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -374,15 +384,17 @@ class ChampionWinnerApp {
             });
             
             if (response.ok) {
-                this.showNotification('Data refreshed successfully!', 'success');
+                const result = await response.json();
+                this.showNotification(result.message || 'Data refreshed successfully!', 'success');
                 this.loadRecentResults();
                 this.loadPerformanceMetrics();
             } else {
-                throw new Error(`API responded with status: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`API responded with status: ${response.status} - ${errorData.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Error refreshing data:', error);
-            this.showNotification('Failed to refresh data. Please try again.', 'error');
+            this.showNotification(`Failed to refresh data: ${error.message}`, 'error');
         } finally {
             this.hideLoading();
         }
@@ -526,11 +538,12 @@ class ChampionWinnerApp {
                 this.performanceMetrics = await response.json();
                 this.updatePerformanceDisplay();
             } else {
-                throw new Error(`API responded with status: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`API responded with status: ${response.status} - ${errorData.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Error loading performance metrics:', error);
-            this.showNotification('Failed to load performance metrics.', 'error');
+            this.showNotification(`Failed to load performance metrics: ${error.message}`, 'error');
         }
     }
     
@@ -554,11 +567,12 @@ class ChampionWinnerApp {
                 this.recentResults = await response.json();
                 this.updateRecentResultsDisplay();
             } else {
-                throw new Error(`API responded with status: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`API responded with status: ${response.status} - ${errorData.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Error loading recent results:', error);
-            this.showNotification('Failed to load recent results.', 'error');
+            this.showNotification(`Failed to load recent results: ${error.message}`, 'error');
         }
     }
     

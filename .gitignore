@@ -150,4 +150,11 @@ db.sqlite3-journal
 
 # Backup files
 *.bak
-*.backup 
+*.backup
+
+# Temporal files created during development/debugging
+test_deployment.py
+check_deployment.py
+deploy_verification.py
+redeploy_and_test.py
+DEPLOYMENT_GUIDE.md 

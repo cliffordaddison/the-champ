@@ -12,4 +12,8 @@ services:
       - key: MODEL_PATH
         value: ./models/
       - key: DATA_PATH
-        value: ./data/ 
+        value: ./data/
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_DEBUG
+        value: false 

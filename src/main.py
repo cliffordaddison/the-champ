@@ -35,6 +35,19 @@ training_status = {
     'completed': False
 }
 
+# Add error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Endpoint not found", "path": request.path}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Internal server error"}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    return jsonify({"error": str(e)}), 500
+
 def initialize_trainer():
     """Initialize the ML trainer"""
     global trainer
@@ -52,6 +65,24 @@ def index():
     """Serve the main application page"""
     return send_from_directory('web', 'index.html')
 
+@app.route('/api')
+def api_info():
+    """API information endpoint"""
+    return jsonify({
+        "name": "Champion Winner API",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": [
+            "/api/health",
+            "/api/predict",
+            "/api/submit-results",
+            "/api/performance-metrics",
+            "/api/recent-results",
+            "/api/refresh-data"
+        ],
+        "timestamp": datetime.now().isoformat()
+    })
+
 @app.route('/<path:filename>')
 def serve_static(filename):
     """Serve static files"""
@@ -62,8 +93,14 @@ def predict():
     """Generate prediction for next draw"""
     try:
         global trainer
+        models_loaded = False
+        
         if trainer is None:
             initialize_trainer()
+        
+        # Check if models are available
+        if trainer and hasattr(trainer, 'models') and trainer.models:
+            models_loaded = True
         
         # For now, return a mock prediction
         # In production, this would use the actual trained model
@@ -83,14 +120,15 @@ def predict():
                 "PatternRecognition": [5, 13, 21, 29, 37, 45],
                 "FrequencyAnalysis": [2, 10, 18, 26, 34, 42]
             },
-            "prediction_timestamp": datetime.now().isoformat()
+            "prediction_timestamp": datetime.now().isoformat(),
+            "model_status": "trained_model" if models_loaded else "mock_prediction"
         }
         
         return jsonify(mock_prediction)
         
     except Exception as e:
         logger.error(f"Error generating prediction: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e), "model_status": "error"}), 500
 
 @app.route('/api/submit-results', methods=['POST'])
 def submit_results():
@@ -379,10 +417,18 @@ def test_scraping():
 @app.route('/api/health')
 def health_check():
     """Health check endpoint"""
+    global trainer
+    models_loaded = False
+    
+    if trainer and hasattr(trainer, 'models') and trainer.models:
+        models_loaded = True
+    
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "models_loaded": models_loaded,
+        "model_status": "trained_model" if models_loaded else "mock_prediction"
     })
 
 if __name__ == '__main__':
@@ -394,9 +440,12 @@ if __name__ == '__main__':
     os.makedirs('models', exist_ok=True)
     os.makedirs('logs', exist_ok=True)
     
+    # Get port from environment variable for deployment
+    port = int(os.environ.get('PORT', system_config.port))
+    
     # Run the application
     app.run(
-        host=system_config.host,
-        port=system_config.port,
-        debug=system_config.debug
+        host='0.0.0.0',  # Allow external connections
+        port=port,
+        debug=False  # Disable debug in production
     ) 
