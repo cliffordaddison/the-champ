@@ -533,7 +533,7 @@ class ChampionWinnerApp {
     
     async loadPerformanceMetrics() {
         try {
-            const response = await fetch('https://champion-winner-api.onrender.com/api/performance-metrics');
+            const response = await fetch('/api/performance-metrics');
             if (response.ok) {
                 this.performanceMetrics = await response.json();
                 this.updatePerformanceDisplay();
@@ -562,7 +562,7 @@ class ChampionWinnerApp {
     
     async loadRecentResults() {
         try {
-            const response = await fetch('https://champion-winner-api.onrender.com/api/recent-results');
+            const response = await fetch('/api/recent-results');
             if (response.ok) {
                 this.recentResults = await response.json();
                 this.updateRecentResultsDisplay();
