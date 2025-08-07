@@ -159,10 +159,27 @@ def predict():
                                 # Extract numbers and dates from the data
                                 for _, row in df.iterrows():
                                     numbers = []
-                                    for col in df.columns:
-                                        if 'number' in col.lower() or 'ball' in col.lower():
-                                            if pd.notna(row[col]) and row[col] > 0:
-                                                numbers.append(int(row[col]))
+                                    
+                                    # Check if we have a 'numbers' column with comma-separated values
+                                    if 'numbers' in df.columns:
+                                        numbers_str = str(row['numbers'])
+                                        # Remove quotes and split by comma
+                                        numbers_str = numbers_str.strip('"').strip("'")
+                                        try:
+                                            numbers = [int(x.strip()) for x in numbers_str.split(',')]
+                                        except:
+                                            logger.warning(f"Could not parse numbers: {numbers_str}")
+                                            continue
+                                    else:
+                                        # Try to find individual number columns
+                                        for col in df.columns:
+                                            if 'number' in col.lower() or 'ball' in col.lower():
+                                                try:
+                                                    value = row[col]
+                                                    if pd.notna(value) and str(value).isdigit():
+                                                        numbers.append(int(value))
+                                                except:
+                                                    continue
                                     
                                     if len(numbers) >= 6:
                                         history.append(numbers[:6])
@@ -515,10 +532,27 @@ def recent_results():
                         for _, row in recent_data.iterrows():
                             # Extract numbers from the row (adjust column names as needed)
                             numbers = []
-                            for col in df.columns:
-                                if 'number' in col.lower() or 'ball' in col.lower():
-                                    if pd.notna(row[col]) and row[col] > 0:
-                                        numbers.append(int(row[col]))
+                            
+                            # Check if we have a 'numbers' column with comma-separated values
+                            if 'numbers' in df.columns:
+                                numbers_str = str(row['numbers'])
+                                # Remove quotes and split by comma
+                                numbers_str = numbers_str.strip('"').strip("'")
+                                try:
+                                    numbers = [int(x.strip()) for x in numbers_str.split(',')]
+                                except:
+                                    logger.warning(f"Could not parse numbers: {numbers_str}")
+                                    continue
+                            else:
+                                # Try to find individual number columns
+                                for col in df.columns:
+                                    if 'number' in col.lower() or 'ball' in col.lower():
+                                        try:
+                                            value = row[col]
+                                            if pd.notna(value) and str(value).isdigit():
+                                                numbers.append(int(value))
+                                        except:
+                                            continue
                             
                             if len(numbers) >= 6:
                                 result = {
