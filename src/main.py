@@ -86,6 +86,10 @@ def index():
 @app.route('/<path:filename>')
 def serve_static(filename):
     """Serve static files"""
+    # Only serve specific file types
+    allowed_extensions = ['.html', '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg']
+    if not any(filename.endswith(ext) for ext in allowed_extensions):
+        return jsonify({"error": "File not found"}), 404
     return send_from_directory('web', filename)
 
 # Add a simple test endpoint
