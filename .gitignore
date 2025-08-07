@@ -28,32 +28,32 @@ ENV/
 env.bak/
 venv.bak/
 
-# Model Files (Sensitive - Keep Private)
-*.pkl
-*.pickle
-*.joblib
-*.h5
-*.hdf5
-*.pth
-*.pt
-*.ckpt
-*.model
-*.weights
-models/
-saved_models/
-checkpoints/
-trained_models/
+# Model Files (Allow for deployment)
+# *.pkl
+# *.pickle
+# *.joblib
+# *.h5
+# *.hdf5
+# *.pth
+# *.pt
+# *.ckpt
+# *.model
+# *.weights
+# models/
+# saved_models/
+# checkpoints/
+# trained_models/
 
-# Data Files (Sensitive - Keep Private)
-*.csv
-*.json
-*.xlsx
-*.xls
-data/
-datasets/
-raw_data/
-processed_data/
-training_data/
+# Data Files (Allow for deployment)
+# *.csv
+# *.json
+# *.xlsx
+# *.xls
+# data/
+# datasets/
+# raw_data/
+# processed_data/
+# training_data/
 
 # Configuration Files with Sensitive Data
 config.ini
