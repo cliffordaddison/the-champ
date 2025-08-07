@@ -192,7 +192,7 @@ class ChampionWinnerApp {
         this.showLoading('Generating prediction...');
         
         try {
-            // Try to call the deployed API
+            // Call the real backend API
             const response = await fetch('https://champion-winner-api.onrender.com/api/predict', {
                 method: 'POST',
                 headers: {
@@ -210,42 +210,14 @@ class ChampionWinnerApp {
                 
                 this.showNotification('Prediction generated successfully!', 'success');
             } else {
-                // Fallback to mock predictions if API is not available
-                this.generateMockPrediction();
+                throw new Error(`API responded with status: ${response.status}`);
             }
         } catch (error) {
-            console.log('API not available, using mock predictions for demo');
-            this.generateMockPrediction();
+            console.error('Error generating prediction:', error);
+            this.showNotification('Failed to generate prediction. Please try again.', 'error');
         } finally {
             this.hideLoading();
         }
-    }
-    
-    generateMockPrediction() {
-        // Generate mock prediction for demo purposes
-        const mockPrediction = {
-            predicted_numbers: [7, 12, 23, 31, 38, 45],
-            confidence_scores: {
-                7: 0.85,
-                12: 0.78,
-                23: 0.72,
-                31: 0.68,
-                38: 0.65,
-                45: 0.61
-            },
-            agent_predictions: {
-                "QLearning": [3, 11, 19, 27, 35, 43],
-                "PatternRecognition": [5, 13, 21, 29, 37, 45],
-                "FrequencyAnalysis": [2, 10, 18, 26, 34, 42]
-            }
-        };
-        
-        this.currentPrediction = mockPrediction;
-        this.updatePredictionDisplay(mockPrediction.predicted_numbers);
-        this.updateConfidenceBars(mockPrediction.confidence_scores);
-        this.updateAgentPredictions(mockPrediction.agent_predictions);
-        
-        this.showNotification('Demo prediction generated! (Mock data)', 'info');
     }
     
     updatePredictionDisplay(numbers) {
@@ -406,44 +378,14 @@ class ChampionWinnerApp {
                 this.loadRecentResults();
                 this.loadPerformanceMetrics();
             } else {
-                // Fallback to mock data
-                this.loadMockData();
+                throw new Error(`API responded with status: ${response.status}`);
             }
         } catch (error) {
-            console.log('API not available, using mock data for demo');
-            this.loadMockData();
+            console.error('Error refreshing data:', error);
+            this.showNotification('Failed to refresh data. Please try again.', 'error');
         } finally {
             this.hideLoading();
         }
-    }
-    
-    loadMockData() {
-        // Load mock data for demo purposes
-        this.loadMockRecentResults();
-        this.loadMockPerformanceMetrics();
-        this.showNotification('Demo data loaded! (Mock data)', 'info');
-    }
-    
-    loadMockRecentResults() {
-        const mockResults = [
-            { numbers: [3, 12, 25, 31, 38, 45], status: 'Partial Match', date: '2024-01-15' },
-            { numbers: [7, 15, 22, 29, 36, 44], status: 'Miss', date: '2024-01-12' },
-            { numbers: [2, 11, 19, 27, 35, 43], status: 'Exact Match', date: '2024-01-10' }
-        ];
-        
-        this.updateRecentResultsDisplay(mockResults);
-    }
-    
-    loadMockPerformanceMetrics() {
-        const mockMetrics = {
-            accuracy_rate: 0.68,
-            total_predictions: 156,
-            exact_matches: 3,
-            partial_matches: 42,
-            recent_performance: 0.72
-        };
-        
-        this.updatePerformanceDisplay(mockMetrics);
     }
     
     async startTraining() {
@@ -579,13 +521,16 @@ class ChampionWinnerApp {
     
     async loadPerformanceMetrics() {
         try {
-            const response = await fetch('/api/performance-metrics');
+            const response = await fetch('https://champion-winner-api.onrender.com/api/performance-metrics');
             if (response.ok) {
                 this.performanceMetrics = await response.json();
                 this.updatePerformanceDisplay();
+            } else {
+                throw new Error(`API responded with status: ${response.status}`);
             }
         } catch (error) {
             console.error('Error loading performance metrics:', error);
+            this.showNotification('Failed to load performance metrics.', 'error');
         }
     }
     
@@ -604,13 +549,16 @@ class ChampionWinnerApp {
     
     async loadRecentResults() {
         try {
-            const response = await fetch('/api/recent-results');
+            const response = await fetch('https://champion-winner-api.onrender.com/api/recent-results');
             if (response.ok) {
                 this.recentResults = await response.json();
                 this.updateRecentResultsDisplay();
+            } else {
+                throw new Error(`API responded with status: ${response.status}`);
             }
         } catch (error) {
             console.error('Error loading recent results:', error);
+            this.showNotification('Failed to load recent results.', 'error');
         }
     }
     
