@@ -284,6 +284,58 @@ class ChampionWinnerTrainer:
             "prediction_timestamp": datetime.now().isoformat()
         }
     
+    def predict(self) -> Dict:
+        """Simple predict method that loads data internally"""
+        try:
+            # Load data from available files
+            data_files = ['data/cleaned_ont49.csv', 'data/fixed_ont49_new.csv', 'data/fixed_ont49.csv', 'data/Ont49.csv']
+            history = []
+            dates = []
+            
+            for file_path in data_files:
+                if os.path.exists(file_path):
+                    try:
+                        import pandas as pd
+                        df = pd.read_csv(file_path)
+                        
+                        if not df.empty:
+                            # Extract numbers and dates from the data
+                            for _, row in df.iterrows():
+                                numbers = []
+                                for col in df.columns:
+                                    if 'number' in col.lower() or 'ball' in col.lower():
+                                        if pd.notna(row[col]) and row[col] > 0:
+                                            numbers.append(int(row[col]))
+                                
+                                if len(numbers) >= 6:
+                                    history.append(numbers[:6])
+                                    
+                                    # Try to get date
+                                    if 'date' in df.columns:
+                                        try:
+                                            date = pd.to_datetime(row['date'])
+                                            dates.append(date)
+                                        except:
+                                            dates.append(datetime.now())
+                                    else:
+                                        dates.append(datetime.now())
+                            
+                            logger.info(f"Loaded {len(history)} historical draws from {file_path}")
+                            break  # Use first available file
+                    except Exception as e:
+                        logger.error(f"Error reading {file_path}: {e}")
+                        continue
+            
+            if not history:
+                return {"error": "No historical data available for prediction"}
+            
+            # Call the main prediction method
+            return self.predict_next_draw(history, dates)
+            
+        except Exception as e:
+            logger.error(f"Error in predict method: {e}")
+            return {"error": f"Prediction failed: {str(e)}"}
+    
     def evaluate_prediction(self, prediction: Dict, actual_numbers: List[int]) -> Dict:
         """Evaluate prediction accuracy"""
         predicted_numbers = prediction.get("predicted_numbers", [])

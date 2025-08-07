@@ -144,14 +144,67 @@ def predict():
         # Use real model prediction if available
         if models_loaded and trainer:
             try:
+                # Load historical data for prediction
+                data_files = ['data/cleaned_ont49.csv', 'data/fixed_ont49_new.csv', 'data/fixed_ont49.csv', 'data/Ont49.csv']
+                history = []
+                dates = []
+                
+                for file_path in data_files:
+                    if os.path.exists(file_path):
+                        try:
+                            import pandas as pd
+                            df = pd.read_csv(file_path)
+                            
+                            if not df.empty:
+                                # Extract numbers and dates from the data
+                                for _, row in df.iterrows():
+                                    numbers = []
+                                    for col in df.columns:
+                                        if 'number' in col.lower() or 'ball' in col.lower():
+                                            if pd.notna(row[col]) and row[col] > 0:
+                                                numbers.append(int(row[col]))
+                                    
+                                    if len(numbers) >= 6:
+                                        history.append(numbers[:6])
+                                        
+                                        # Try to get date
+                                        if 'date' in df.columns:
+                                            try:
+                                                date = pd.to_datetime(row['date'])
+                                                dates.append(date)
+                                            except:
+                                                dates.append(datetime.now())
+                                        else:
+                                            dates.append(datetime.now())
+                                
+                                logger.info(f"Loaded {len(history)} historical draws from {file_path}")
+                                break  # Use first available file
+                        except Exception as e:
+                            logger.error(f"Error reading {file_path}: {e}")
+                            continue
+                
+                if not history:
+                    return jsonify({
+                        "error": "No historical data available for prediction",
+                        "message": "Please refresh data or upload training data first",
+                        "model_status": "no_data"
+                    }), 503
+                
                 # Get real prediction from the trained model
-                prediction = trainer.predict_next_draw()
+                prediction = trainer.predict_next_draw(history, dates)
+                
+                # Check if prediction has error
+                if 'error' in prediction:
+                    return jsonify({
+                        "error": prediction['error'],
+                        "model_status": "error"
+                    }), 500
                 
                 # Format the prediction for the API response
                 real_prediction = {
-                    "predicted_numbers": prediction.get('numbers', []),
+                    "predicted_numbers": prediction.get('predicted_numbers', []),
                     "confidence_scores": prediction.get('confidence_scores', {}),
-                    "ensemble_probabilities": prediction.get('probabilities', []),
+                    "ensemble_probabilities": prediction.get('ensemble_probabilities', []),
                     "agent_predictions": prediction.get('agent_predictions', {}),
                     "prediction_timestamp": datetime.now().isoformat(),
                     "model_status": "trained_model"
