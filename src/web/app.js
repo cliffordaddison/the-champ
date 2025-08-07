@@ -210,20 +210,37 @@ class ChampionWinnerApp {
                 
                 // Show model status
                 const modelStatus = prediction.model_status || 'unknown';
-                if (modelStatus === 'mock_prediction') {
-                    this.showNotification('Using mock prediction (models not available)', 'warning');
-                } else if (modelStatus === 'trained_model') {
+                if (modelStatus === 'trained_model') {
                     this.showNotification('Prediction generated successfully!', 'success');
                 } else {
                     this.showNotification('Prediction generated with unknown model status', 'info');
                 }
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(`API responded with status: ${response.status} - ${errorData.error || 'Unknown error'}`);
+                const errorMessage = errorData.error || 'Unknown error';
+                const details = errorData.message || '';
+                
+                if (response.status === 503 && errorData.model_status === 'no_models') {
+                    this.showNotification('No trained models available. Please train the models first.', 'warning');
+                } else if (response.status === 500) {
+                    this.showNotification(`Prediction failed: ${errorMessage}`, 'error');
+                } else {
+                    this.showNotification(`Error: ${errorMessage}`, 'error');
+                }
+                
+                // Clear previous prediction display
+                this.updatePredictionDisplay([]);
+                this.updateConfidenceBars({});
+                this.updateAgentPredictions({});
             }
         } catch (error) {
             console.error('Error generating prediction:', error);
             this.showNotification('Failed to generate prediction. Please try again.', 'error');
+            
+            // Clear previous prediction display
+            this.updatePredictionDisplay([]);
+            this.updateConfidenceBars({});
+            this.updateAgentPredictions({});
         } finally {
             this.hideLoading();
         }
@@ -568,11 +585,25 @@ class ChampionWinnerApp {
                 this.updateRecentResultsDisplay();
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(`API responded with status: ${response.status} - ${errorData.error || 'Unknown error'}`);
+                const errorMessage = errorData.error || 'Unknown error';
+                
+                if (response.status === 404 && errorData.data_status === 'no_data') {
+                    this.showNotification('No historical data available. Please refresh data first.', 'warning');
+                } else {
+                    this.showNotification(`Failed to load recent results: ${errorMessage}`, 'error');
+                }
+                
+                // Clear recent results display
+                this.recentResults = [];
+                this.updateRecentResultsDisplay();
             }
         } catch (error) {
             console.error('Error loading recent results:', error);
             this.showNotification(`Failed to load recent results: ${error.message}`, 'error');
+            
+            // Clear recent results display
+            this.recentResults = [];
+            this.updateRecentResultsDisplay();
         }
     }
     

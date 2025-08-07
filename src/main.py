@@ -161,49 +161,18 @@ def predict():
                 
             except Exception as e:
                 logger.error(f"Error getting real prediction: {e}")
-                # Fall back to mock prediction if real prediction fails
-                mock_prediction = {
-                    "predicted_numbers": [7, 12, 23, 31, 38, 45],
-                    "confidence_scores": {
-                        7: 0.85,
-                        12: 0.78,
-                        23: 0.72,
-                        31: 0.68,
-                        38: 0.65,
-                        45: 0.61
-                    },
-                    "ensemble_probabilities": [0.02] * 49,
-                    "agent_predictions": {
-                        "QLearning": [3, 11, 19, 27, 35, 43],
-                        "PatternRecognition": [5, 13, 21, 29, 37, 45],
-                        "FrequencyAnalysis": [2, 10, 18, 26, 34, 42]
-                    },
-                    "prediction_timestamp": datetime.now().isoformat(),
-                    "model_status": "mock_prediction"
-                }
-                return jsonify(mock_prediction)
+                return jsonify({
+                    "error": "Failed to generate prediction from trained models",
+                    "details": str(e),
+                    "model_status": "error"
+                }), 500
         else:
-            # Return mock prediction when models are not available
-            mock_prediction = {
-                "predicted_numbers": [7, 12, 23, 31, 38, 45],
-                "confidence_scores": {
-                    7: 0.85,
-                    12: 0.78,
-                    23: 0.72,
-                    31: 0.68,
-                    38: 0.65,
-                    45: 0.61
-                },
-                "ensemble_probabilities": [0.02] * 49,
-                "agent_predictions": {
-                    "QLearning": [3, 11, 19, 27, 35, 43],
-                    "PatternRecognition": [5, 13, 21, 29, 37, 45],
-                    "FrequencyAnalysis": [2, 10, 18, 26, 34, 42]
-                },
-                "prediction_timestamp": datetime.now().isoformat(),
-                "model_status": "mock_prediction"
-            }
-            return jsonify(mock_prediction)
+            # Return error when models are not available
+            return jsonify({
+                "error": "No trained models available",
+                "message": "Please train the models first using the training endpoint",
+                "model_status": "no_models"
+            }), 503
         
     except Exception as e:
         logger.error(f"Error generating prediction: {e}")
@@ -509,26 +478,13 @@ def recent_results():
                     logger.error(f"Error reading {file_path}: {e}")
                     continue
         
-        # If no real data found, return mock data
+        # If no real data found, return error
         if not all_results:
-            mock_results = [
-                {
-                    'date': '2024-01-15',
-                    'numbers': [3, 12, 25, 31, 38, 45],
-                    'status': 'partial'
-                },
-                {
-                    'date': '2024-01-12',
-                    'numbers': [7, 15, 22, 29, 36, 44],
-                    'status': 'miss'
-                },
-                {
-                    'date': '2024-01-10',
-                    'numbers': [2, 11, 19, 27, 35, 43],
-                    'status': 'match'
-                }
-            ]
-            return jsonify(mock_results)
+            return jsonify({
+                "error": "No historical data available",
+                "message": "Please refresh data or upload training data first",
+                "data_status": "no_data"
+            }), 404
         
         # Return real results (limit to 10 most recent)
         return jsonify(all_results[-10:])
@@ -601,12 +557,18 @@ def health_check():
     """Health check endpoint"""
     global trainer, models_loaded
     
+    # Determine model status
+    if models_loaded:
+        model_status = "trained_model"
+    else:
+        model_status = "no_models"
+    
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": "1.0.0",
         "models_loaded": models_loaded,
-        "model_status": "trained_model" if models_loaded else "mock_prediction"
+        "model_status": model_status
     })
 
 if __name__ == '__main__':
